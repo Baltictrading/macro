@@ -20,10 +20,14 @@ COUNTRIES = {
 
 # --- Data Fetching ---
 @st.cache_data(ttl=3600)
-def fetch_unemployment(series_id: str) -> pd.DataFrame:
+def fetch_unemployment(series_id: str) -> pd.Series:
     """Fetch monthly unemployment rate series from FRED"""
     url = "https://api.stlouisfed.org/fred/series/observations"
-    params = {"series_id": series_id, "api_key": API_KEYS["FRED"], "file_type": "json"}
+    params = {
+        "series_id": series_id,
+        "api_key": API_KEYS["FRED"],
+        "file_type": "json"
+    }
     resp = requests.get(url, params=params).json().get("observations", [])
     df = pd.DataFrame(resp)
     df["date"] = pd.to_datetime(df["date"])
@@ -50,34 +54,27 @@ if view == "Grafik":
         yaxis_title="Rate (%)"
     )
     st.plotly_chart(fig, use_container_width=True)
-
 else:
-    # Tabelle: Unemployment Rate in Prozent für die letzten 12 Monate
     st.subheader("Unemployment Rate (%)")
     table_data = {}
     date_labels = []
-    # First country to get dates
+    # Get date labels from first selected country
     for country in selected_countries:
         df0 = fetch_unemployment(COUNTRIES[country]).sort_index(ascending=False)
         last_dates = df0.index[:13]
         date_labels = [d.strftime('%b %Y') for d in last_dates]
         break
-    # Collect rows
     for country in selected_countries:
         df = fetch_unemployment(COUNTRIES[country]).sort_index(ascending=False)
         values = df.head(13).tolist()
-        # Pad if less
         if len(values) < 13:
             values += [None] * (13 - len(values))
-        # Format as percent strings
         formatted = [f"{v:.2f}%" if pd.notna(v) else "" for v in values]
         table_data[country] = formatted
-    # Build DataFrame
     cols = ["Aktuell"] + date_labels[1:]
     table_df = pd.DataFrame.from_dict(table_data, orient='index', columns=cols)
     table_df.index.name = 'Land'
     st.dataframe(table_df)
 
 # Footer
-st.markdown("---")
-st.markdown("*Datenquelle: FRED API (St. Louis Fed).*)"
+st.markdown("*Datenquelle: FRED API (St. Louis Fed).*" )
