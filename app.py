@@ -35,33 +35,45 @@ WB_COUNTRIES = ["China", "New Zealand"]
 # --- Fetch Functions ---
 @st.cache_data(ttl=3600)
 def fetch_fred(series_id: str) -> pd.Series:
-    "Fetch monthly series from FRED"
+    "Fetch a monthly time series from FRED; return empty Series if no data."
     url = "https://api.stlouisfed.org/fred/series/observations"
-    params = {"series_id": series_id, "api_key": API_KEYS["FRED"], "file_type": "json"}
-    obs = requests.get(url, params=params).json().get("observations", [])
-    df = pd.DataFrame(obs)
+    params = {"series_id": series_id, "api_key": API_KEYS.get("FRED", ""), "file_type": "json"}
+    resp = requests.get(url, params=params)
+    data = []
+    try:
+        data = resp.json().get("observations", [])
+    except Exception:
+        return pd.Series(dtype=float)
+    if not data:
+        return pd.Series(dtype=float)
+    df = pd.DataFrame(data)
+    if "date" not in df.columns or "value" not in df.columns:
+        return pd.Series(dtype=float)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     return df.set_index("date")["value"].sort_index()
 
 @st.cache_data(ttl=3600)
 def fetch_worldbank(country_code: str, indicator: str) -> pd.Series:
-    "Fetch annual series from World Bank (e.g. unemployment, inflation)"
+    "Fetch an annual series from World Bank; return empty Series if no data."
     url = f"https://api.worldbank.org/v2/country/{country_code}/indicator/{indicator}"
     params = {"format": "json", "per_page": 1000}
-    resp = requests.get(url, params=params).json()
-    data = []
-    if isinstance(resp, list) and len(resp) > 1 and isinstance(resp[1], list):
-        data = resp[1]
+    resp = requests.get(url, params=params)
+    try:
+        content = resp.json()
+    except Exception:
+        return pd.Series(dtype=float)
+    # content[1] should be list of records
+    records = content[1] if isinstance(content, list) and len(content) > 1 and isinstance(content[1], list) else []
     rows = []
-    for item in data:
+    for item in records:
         val = item.get("value")
         date = item.get("date")
         if val is None or date is None:
             continue
         try:
             dt = pd.to_datetime(f"{date}-01-01")
-        except:
+        except Exception:
             continue
         rows.append({"date": dt, "value": val})
     if not rows:
@@ -81,7 +93,7 @@ indicator = st.sidebar.selectbox(
 all_countries = list(FRED_UNEMPLOY.keys()) + WB_COUNTRIES
 countries = st.sidebar.multiselect("Länder", all_countries, default=all_countries)
 
-# --- Helper ---
+# --- Helper to choose the correct series ---
 def get_series(country: str) -> pd.Series:
     if indicator == "Unemployment Rate":
         if country in FRED_UNEMPLOY:
@@ -91,13 +103,13 @@ def get_series(country: str) -> pd.Series:
     if indicator == "Monthly Inflation Rate":
         if country in CPI_INDEX:
             idx = fetch_fred(CPI_INDEX[country])
-            return idx.pct_change(1) * 100
+            return idx.pct_change(1) * 100 if not idx.empty else pd.Series(dtype=float)
         else:
             return pd.Series(dtype=float)
     if indicator == "Annual Inflation Rate":
         if country in CPI_INDEX:
             idx = fetch_fred(CPI_INDEX[country])
-            return idx.pct_change(12) * 100
+            return idx.pct_change(12) * 100 if not idx.empty else pd.Series(dtype=float)
         else:
             return fetch_worldbank(country, WB_INFLATION_IND)
     return pd.Series(dtype=float)
@@ -109,24 +121,30 @@ if mode == "Grafik":
         s = get_series(c)
         if not s.empty:
             fig.add_scatter(x=s.index, y=s.values, mode="lines", name=c)
-    y_axis = "%" if "Inflation" in indicator or "Unemployment" in indicator else "Wert"
-    fig.update_layout(title=indicator, xaxis_title="Datum", yaxis_title=y_axis)
+    y_label = "%" if "Inflation" in indicator or "Unemployment" in indicator else "Wert"
+    fig.update_layout(title=indicator, xaxis_title="Datum", yaxis_title=y_label)
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.subheader(indicator)
     table = {}
     dates = []
+    # get columns from first non-empty
     for c in countries:
         s0 = get_series(c).sort_index(ascending=False)
-        dates = s0.index[:13]
-        break
-    cols = [d.strftime("%b %Y") for d in dates]
+        if not s0.empty:
+            dates = s0.index[:13]
+            break
+    cols = [d.strftime('%b %Y') for d in dates]
     for c in countries:
         s = get_series(c).sort_index(ascending=False).head(13).tolist()
         fmt = [f"{v:.2f}%" if pd.notna(v) else "" for v in s]
         table[c] = fmt
-    df = pd.DataFrame.from_dict(table, orient='index', columns=cols)
+    if dates:
+        df = pd.DataFrame.from_dict(table, orient='index', columns=cols)
+    else:
+        df = pd.DataFrame()
     df.index.name = 'Land'
     st.dataframe(df)
 
+# Footer
 st.markdown("*Datenquelle: FRED & World Bank API.*")
