@@ -3,8 +3,6 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
-import matplotlib.pyplot as plt
-import streamlit.components.v1 as components
 
 # --- Config ---
 API_KEYS = {"FRED": st.secrets["FRED_API_KEY"]}
