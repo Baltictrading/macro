@@ -60,20 +60,33 @@ if view == "Grafik":
         cfg = ENDPOINTS[country].get(indicator)
         if not cfg:
             continue
-        # Fetch data
         if cfg['fetch_fn'] == 'fred':
             df = fetch_fred(cfg['series_id'], API_KEYS['FRED'])
-        elif cfg['fetch_fn'] == 'eurostat':
-            df = fetch_eurostat(cfg['dataset'])
         else:
-            continue
+            df = fetch_eurostat(cfg['dataset'])
         if not df.empty:
             fig.add_scatter(x=df.index, y=df['value'], mode='lines', name=country)
     fig.update_layout(title=indicator, xaxis_title='Datum', yaxis_title='Wert')
     st.plotly_chart(fig, use_container_width=True)
 
-else:  # Tabelle
-    # Erstelle eine Tabelle mit Aktuell und den letzten 12 Monaten
+else:
+    # Tabelle: Überschrift
+    st.subheader(indicator)
+    # Ermittlung der Datums-Labels aus dem ersten Land
+    date_labels = []
+    for country in countries:
+        cfg = ENDPOINTS[country].get(indicator)
+        if not cfg:
+            continue
+        if cfg['fetch_fn'] == 'fred':
+            df0 = fetch_fred(cfg['series_id'], API_KEYS['FRED'])
+        else:
+            df0 = fetch_eurostat(cfg['dataset'])
+        df0 = df0.sort_index(ascending=False)
+        dates = df0.index[:13]
+        date_labels = [d.strftime('%b %Y') for d in dates]
+        break
+    # Daten sammeln
     table = {}
     for country in countries:
         cfg = ENDPOINTS[country].get(indicator)
@@ -81,19 +94,18 @@ else:  # Tabelle
             continue
         if cfg['fetch_fn'] == 'fred':
             df = fetch_fred(cfg['series_id'], API_KEYS['FRED'])
-        elif cfg['fetch_fn'] == 'eurostat':
-            df = fetch_eurostat(cfg['dataset'])
         else:
-            continue
+            df = fetch_eurostat(cfg['dataset'])
         df = df.sort_index(ascending=False)
         vals = df['value'].head(13).tolist()
         if len(vals) < 13:
             vals += [None] * (13 - len(vals))
         table[country] = vals
-    cols = ['Aktuell'] + [f'{i}M zurück' for i in range(1, 13)]
-    table_df = pd.DataFrame.from_dict(table, orient='index', columns=cols)
+    table_df = pd.DataFrame.from_dict(table, orient='index', columns=date_labels)
     table_df.index.name = 'Land'
-    st.dataframe(table_df)
+    # Heatmap-ähnliche Farbgebung
+    styled = table_df.style.background_gradient(axis=None)
+    st.dataframe(styled)
 
 # Footer
 st.markdown("---")
