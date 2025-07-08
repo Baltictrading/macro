@@ -1,5 +1,6 @@
 import streamlit as st
-import requests\import pandas as pd
+import requests
+import pandas as pd
 import plotly.express as px
 
 # --- Config ---
@@ -104,10 +105,11 @@ else:
     for name in metrics:
         if name in ("CPI MoM", "CPI YoY", "Retail Sales MoM"):
             styled = styled.format("{:.2f}%", subset=pd.IndexSlice[name, :])
+        elif name in ("Nonfarm Payrolls", "New Home Sales", "GDP (Real, Quarterly)", "Consumer Confidence", "Balance of Trade"):
+            styled = styled.format("{:, .0f}", subset=pd.IndexSlice[name, :])
         else:
-            styled = styled.format("{:,.0f}" if name in ("Nonfarm Payrolls", "New Home Sales", "GDP (Real, Quarterly)", "Consumer Confidence", "Balance of Trade") else "{:.2f}", subset=pd.IndexSlice[name, :])
+            styled = styled.format("{:.2f}", subset=pd.IndexSlice[name, :])
 
-    # Render
     st.write(styled)
 
 # Footer
