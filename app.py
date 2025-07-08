@@ -1,6 +1,5 @@
 import streamlit as st
-import requests
-import pandas as pd
+import requests\import pandas as pd
 import plotly.express as px
 
 # --- Config ---
@@ -38,7 +37,7 @@ def fetch_fred(series_id: str) -> pd.Series:
 
 
 def get_series(name: str) -> pd.Series:
-    """Return series for given metric, apply pct_change for some metrics."""
+    """Return series for given metric, apply pct_change where needed."""
     s = fetch_fred(SERIES[name])
     if name == "CPI MoM":
         return s.pct_change(1) * 100
@@ -70,11 +69,11 @@ if view == "Grafik":
 # --- Table View ---
 else:
     st.subheader("Tabelle der letzten 13 Perioden mit Hervorhebung")
-    # Build numeric table
+    # Prepare numeric DataFrame
     numeric = {}
-    # determine columns (latest 13 periods)
-    ref = get_series(metrics[0]).sort_index(ascending=False).index[:13]
-    cols = [d.strftime('%b %Y') for d in ref]
+    # Determine columns: last 13 periods from first metric
+    ref_index = get_series(metrics[0]).sort_index(ascending=False).index[:13]
+    cols = [d.strftime('%b %Y') for d in ref_index]
     for name in metrics:
         vals = get_series(name).sort_index(ascending=False).head(13).tolist()
         if len(vals) < 13:
@@ -83,30 +82,32 @@ else:
     num_df = pd.DataFrame.from_dict(numeric, orient='index', columns=cols)
     num_df.index.name = 'Kennzahl'
 
-    # Highlight function: green if improved vs prior, red if worsened
+    # Highlight improved vs worsened
     def highlight(row):
         styles = []
         for i in range(len(row)):
             cur = row.iloc[i]
-            if i == len(row) - 1 or cur is None or row.iloc[i+1] is None:
+            prev = row.iloc[i+1] if i+1 < len(row) else None
+            if pd.isna(cur) or pd.isna(prev):
                 styles.append("")
+            elif cur > prev:
+                styles.append('background-color: #d4fcdc')  # greenish
+            elif cur < prev:
+                styles.append('background-color: #fcdcdc')  # reddish
             else:
-                prev = row.iloc[i+1]
-                if cur > prev:
-                    styles.append('background-color: #d4fcdc')
-                elif cur < prev:
-                    styles.append('background-color: #fcdcdc')
-                else:
-                    styles.append("")
+                styles.append("")
         return styles
 
     styled = num_df.style.apply(highlight, axis=1)
-    # Formatting: percent vs absolute
-    percent = {"CPI MoM", "CPI YoY", "Retail Sales MoM"}
-    for name in metrics:
-        fmt = "{:.2f}%" if name in percent else "{:, .2f}"
-        styled = styled.format({name: fmt}, na_rep="")
 
+    # Apply correct formatting per row
+    for name in metrics:
+        if name in ("CPI MoM", "CPI YoY", "Retail Sales MoM"):
+            styled = styled.format("{:.2f}%", subset=pd.IndexSlice[name, :])
+        else:
+            styled = styled.format("{:,.0f}" if name in ("Nonfarm Payrolls", "New Home Sales", "GDP (Real, Quarterly)", "Consumer Confidence", "Balance of Trade") else "{:.2f}", subset=pd.IndexSlice[name, :])
+
+    # Render
     st.write(styled)
 
 # Footer
