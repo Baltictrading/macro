@@ -98,8 +98,7 @@ else:
     table_df = pd.DataFrame.from_dict(table_data, orient='index', columns=cols)
     table_df.index.name = 'Land'
     # Apply gradient: low=green, high=red
-    styled = table_df.style.background_gradient(cmap='RdYlGn_r', axis=None)
-    st.dataframe(styled)
+  styled = table_df.style.background_gradient(cmap='RdYlGn_r', axis=None)
+    # statt st.dataframe: den Styler direkt rendern
+    st.write(styled)
 
-# Footer
-st.markdown("*Datenquelle: FRED API & World Bank API.*")
