@@ -100,5 +100,4 @@ else:
     html = styled.to_html()
     components.html(html, height=400)
 
-# Footer
-st.markdown("*Datenquelle: FRED API & World Bank API.*")
+
