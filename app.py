@@ -49,7 +49,7 @@ def get_series(name: str) -> pd.Series:
         return s.pct_change(1) * 100
     return s
 
-st.title("US Dashboard via FRED – nur Deine Kennzahlen")
+st.title("US-Macro-Dashboard")
 
 # Nur Tabellen-Ansicht
 metrics = list(SERIES.keys())
@@ -73,6 +73,5 @@ st.dataframe(df)
 
 st.markdown("""
 ---
-**Hinweis:** PMI-Daten stellt FRED seit 2016 nicht mehr bereit.  
-Für Services-, Manufacturing- oder Composite-PMI müsstest Du eine andere Quelle (z.B. TradingEconomics API) anbinden.
+**Hinweis:** PMI-Daten stellt FRED seit 2016 nicht mehr bereit. 
 """)
