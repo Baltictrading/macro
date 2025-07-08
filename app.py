@@ -3,6 +3,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
+import matplotlib.pyplot as plt
 
 # --- Config ---
 API_KEYS = {"FRED": st.secrets["FRED_API_KEY"]}
@@ -64,10 +65,7 @@ if view == "Grafik":
     fig = px.line()
     for country in selected:
         cfg = COUNTRIES[country]
-        if cfg["source"] == "fred":
-            series = fetch_fred_series(cfg["code"])
-        else:
-            series = fetch_worldbank(cfg["code"])
+        series = fetch_fred_series(cfg["code"]) if cfg["source"] == "fred" else fetch_worldbank(cfg["code"])
         if not series.empty:
             fig.add_scatter(x=series.index, y=series.values, mode="lines", name=country)
     fig.update_layout(
@@ -76,7 +74,6 @@ if view == "Grafik":
         yaxis_title="Rate (%)"
     )
     st.plotly_chart(fig, use_container_width=True)
-
 else:
     st.subheader("Unemployment Rate (%)")
     table_data = {}
@@ -100,7 +97,9 @@ else:
     cols = ["Aktuell"] + date_labels[1:]
     table_df = pd.DataFrame.from_dict(table_data, orient='index', columns=cols)
     table_df.index.name = 'Land'
-    st.dataframe(table_df)
+    # Apply gradient: low=green, high=red
+    styled = table_df.style.background_gradient(cmap='RdYlGn_r', axis=None)
+    st.dataframe(styled)
 
 # Footer
 st.markdown("*Datenquelle: FRED API & World Bank API.*")
