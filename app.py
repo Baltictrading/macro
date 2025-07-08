@@ -4,6 +4,7 @@ import requests
 import pandas as pd
 import plotly.express as px
 import matplotlib.pyplot as plt
+import streamlit.components.v1 as components
 
 # --- Config ---
 API_KEYS = {"FRED": st.secrets["FRED_API_KEY"]}
@@ -27,11 +28,7 @@ COUNTRIES = {
 def fetch_fred_series(series_id: str) -> pd.Series:
     """Fetch monthly series from FRED"""
     url = "https://api.stlouisfed.org/fred/series/observations"
-    params = {
-        "series_id": series_id,
-        "api_key": API_KEYS["FRED"],
-        "file_type": "json"
-    }
+    params = {"series_id": series_id, "api_key": API_KEYS["FRED"], "file_type": "json"}
     data = requests.get(url, params=params).json().get("observations", [])
     df = pd.DataFrame(data)
     df["date"] = pd.to_datetime(df["date"])
@@ -63,71 +60,45 @@ def fetch_worldbank(country_code: str) -> pd.Series:
 # --- Streamlit UI ---
 st.title("Makro-Dashboard: Unemployment Rate Major Currencies")
 view = st.sidebar.radio("Darstellung", ["Grafik", "Tabelle"])
-selected = st.sidebar.multiselect(
-    "Länder", list(COUNTRIES.keys()), default=list(COUNTRIES.keys())
-)
+selected = st.sidebar.multiselect("Länder", list(COUNTRIES.keys()), default=list(COUNTRIES.keys()))
 
 if view == "Grafik":
     fig = px.line()
     for country in selected:
         cfg = COUNTRIES[country]
-        if cfg["source"] == "fred":
-            series = fetch_fred_series(cfg["code"])
-        else:
-            series = fetch_worldbank(cfg["code"])
+        series = fetch_fred_series(cfg["code"]) if cfg["source"] == "fred" else fetch_worldbank(cfg["code"])
         if not series.empty:
-            fig.add_scatter(
-                x=series.index,
-                y=series.values,
-                mode="lines",
-                name=country
-            )
-    fig.update_layout(
-        title="Unemployment Rate (%)",
-        xaxis_title="Datum",
-        yaxis_title="Rate (%)"
-    )
+            fig.add_scatter(x=series.index, y=series.values, mode="lines", name=country)
+    fig.update_layout(title="Unemployment Rate (%)", xaxis_title="Datum", yaxis_title="Rate (%)")
     st.plotly_chart(fig, use_container_width=True)
+
 else:
     st.subheader("Unemployment Rate (%)")
     table_data = {}
     date_labels = []
-
-    # Determine column labels
+    # Determine column labels from first selected country
     for country in selected:
         cfg = COUNTRIES[country]
-        if cfg["source"] == "fred":
-            series = fetch_fred_series(cfg["code"])    
-        else:
-            series = fetch_worldbank(cfg["code"])
+        series = fetch_fred_series(cfg["code"]) if cfg["source"] == "fred" else fetch_worldbank(cfg["code"])
         dates = series.sort_index(ascending=False).index[:13]
         date_labels = [d.strftime('%b %Y') for d in dates]
         break
-
     # Build table rows
     for country in selected:
         cfg = COUNTRIES[country]
-        if cfg["source"] == "fred":
-            series = fetch_fred_series(cfg["code"])
-        else:
-            series = fetch_worldbank(cfg["code"])
+        series = fetch_fred_series(cfg["code"]) if cfg["source"] == "fred" else fetch_worldbank(cfg["code"])
         values = series.sort_index(ascending=False).head(13).tolist()
         if len(values) < 13:
             values += [None] * (13 - len(values))
         formatted = [f"{v:.2f}%" if pd.notna(v) else "" for v in values]
         table_data[country] = formatted
-
     cols = ["Aktuell"] + date_labels[1:]
-    table_df = pd.DataFrame.from_dict(
-        table_data, orient='index', columns=cols
-    )
+    table_df = pd.DataFrame.from_dict(table_data, orient='index', columns=cols)
     table_df.index.name = 'Land'
-
-    # Render styled table: green = low, red = high
-    styled = table_df.style.background_gradient(
-        cmap='RdYlGn_r', axis=None
-    )
-    st.write(styled)
+    # Styled table using HTML render
+    styled = table_df.style.background_gradient(cmap='RdYlGn_r', axis=None)
+    html = styled.to_html()
+    components.html(html, height=400)
 
 # Footer
 st.markdown("*Datenquelle: FRED API & World Bank API.*")
