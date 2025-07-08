@@ -64,38 +64,51 @@ if view == "Grafik":
     fig = px.line()
     for country in selected:
         cfg = COUNTRIES[country]
-        series = fetch_fred_series(cfg["code"]) if cfg["source"] == "fred" else fetch_worldbank(cfg["code"])
+        if cfg["source"] == "fred":
+            series = fetch_fred_series(cfg["code"])
+        else:
+            series = fetch_worldbank(cfg["code"])
         if not series.empty:
             fig.add_scatter(x=series.index, y=series.values, mode="lines", name=country)
-    fig.update_layout(title="Unemployment Rate (%)", xaxis_title="Datum", yaxis_title="Rate (%)")
+    fig.update_layout(
+        title="Unemployment Rate (%)",
+        xaxis_title="Datum",
+        yaxis_title="Rate (%)"
+    )
     st.plotly_chart(fig, use_container_width=True)
-
 else:
     st.subheader("Unemployment Rate (%)")
     table_data = {}
     date_labels = []
+
     # Determine column labels from first selected country
     for country in selected:
         cfg = COUNTRIES[country]
-        series = fetch_fred_series(cfg["code"]) if cfg["source"] == "fred" else fetch_worldbank(cfg["code"])
+        if cfg["source"] == "fred":
+            series = fetch_fred_series(cfg["code"])
+        else:
+            series = fetch_worldbank(cfg["code"])
         dates = series.sort_index(ascending=False).index[:13]
         date_labels = [d.strftime('%b %Y') for d in dates]
         break
+
     # Build table rows
     for country in selected:
         cfg = COUNTRIES[country]
-        series = fetch_fred_series(cfg["code"]) if cfg["source"] == "fred" else fetch_worldbank(cfg["code"])
+        if cfg["source"] == "fred":
+            series = fetch_fred_series(cfg["code"])
+        else:
+            series = fetch_worldbank(cfg["code"])
         values = series.sort_index(ascending=False).head(13).tolist()
         if len(values) < 13:
             values += [None] * (13 - len(values))
         formatted = [f"{v:.2f}%" if pd.notna(v) else "" for v in values]
         table_data[country] = formatted
+
     cols = ["Aktuell"] + date_labels[1:]
     table_df = pd.DataFrame.from_dict(table_data, orient='index', columns=cols)
     table_df.index.name = 'Land'
-    # Styled table using HTML render
-    styled = table_df.style.background_gradient(cmap='RdYlGn_r', axis=None)
-    html = styled.to_html()
-    components.html(html, height=400)
+    st.dataframe(table_df)
 
-
+# Footer
+st.markdown("*Datenquelle: FRED API & World Bank API.*")
