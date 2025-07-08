@@ -23,9 +23,13 @@ SERIES = {
 
 @st.cache_data(ttl=3600)
 def fetch_fred(series_id: str) -> pd.Series:
-    """Fetch a monthly series from FRED."""
+    """Holt eine monatliche Zeitreihe aus FRED."""
     url = "https://api.stlouisfed.org/fred/series/observations"
-    params = {"series_id": series_id, "api_key": API_KEY, "file_type": "json"}
+    params = {
+        "series_id": series_id,
+        "api_key": API_KEY,
+        "file_type": "json"
+    }
     data = requests.get(url, params=params).json().get("observations", [])
     if not data:
         return pd.Series(dtype=float)
@@ -36,8 +40,7 @@ def fetch_fred(series_id: str) -> pd.Series:
     df["value"] = pd.to_numeric(df["value"], errors="coerce")
     return df.set_index("date")["value"].sort_index()
 
-
-def get_series(name: str) -> pd.Series:
+ def get_series(name: str) -> pd.Series:
     """Return series for given metric, apply pct_change where needed."""
     s = fetch_fred(SERIES[name])
     if name == "CPI MoM":
@@ -49,69 +52,33 @@ def get_series(name: str) -> pd.Series:
     return s
 
 # --- UI ---
-st.title("US Economic Dashboard via FRED – Deine Kennzahlen")
-view = st.sidebar.radio("Darstellung", ["Grafik", "Tabelle"])
-metrics = st.sidebar.multiselect("Kennzahlen", list(SERIES.keys()), default=list(SERIES.keys()))
+st.title("US Dashboard via FRED – nur Deine Kennzahlen")
 
-# --- Plot View ---
-if view == "Grafik":
-    fig = px.line()
-    for name in metrics:
-        s = get_series(name)
-        if not s.empty:
-            fig.add_scatter(x=s.index, y=s.values, mode="lines", name=name)
-    fig.update_layout(
-        title="US Kennzahlen",
-        xaxis_title="Datum",
-        yaxis_title="Wert / %"
-    )
-    st.plotly_chart(fig, use_container_width=True)
+# Nur Tabellen-Ansicht
+metrics = list(SERIES.keys())
+st.subheader("Tabelle der letzten 13 Perioden")
 
-# --- Table View ---
-else:
-    st.subheader("Tabelle der letzten 13 Perioden mit Hervorhebung")
-    # Prepare numeric DataFrame
-    numeric = {}
-    # Determine columns: last 13 periods from first metric
-    ref_index = get_series(metrics[0]).sort_index(ascending=False).index[:13]
-    cols = [d.strftime('%b %Y') for d in ref_index]
-    for name in metrics:
-        vals = get_series(name).sort_index(ascending=False).head(13).tolist()
-        if len(vals) < 13:
-            vals += [None] * (13 - len(vals))
-        numeric[name] = vals
-    num_df = pd.DataFrame.from_dict(numeric, orient='index', columns=cols)
-    num_df.index.name = 'Kennzahl'
+# Spaltenlabels aus erster Kennzahl
+dates = get_series(metrics[0]).sort_index(ascending=False).index[:13]
+cols = [d.strftime("%b %Y") for d in dates]
 
-    # Highlight improved vs worsened
-    def highlight(row):
-        styles = []
-        for i in range(len(row)):
-            cur = row.iloc[i]
-            prev = row.iloc[i+1] if i+1 < len(row) else None
-            if pd.isna(cur) or pd.isna(prev):
-                styles.append("")
-            elif cur > prev:
-                styles.append('background-color: #d4fcdc')  # greenish
-            elif cur < prev:
-                styles.append('background-color: #fcdcdc')  # reddish
-            else:
-                styles.append("")
-        return styles
+# Daten sammeln
+table = {}
+for name in metrics:
+    vals = get_series(name).sort_index(ascending=False).head(13).tolist()
+    if name in ("CPI MoM", "CPI YoY", "Retail Sales MoM"):
+        row = [f"{v:.2f}%" if pd.notna(v) else "" for v in vals]
+    else:
+        row = [f"{v:,.2f}" if pd.notna(v) else "" for v in vals]
+    table[name] = row
 
-    styled = num_df.style.apply(highlight, axis=1)
+# DataFrame erstellen
+df = pd.DataFrame.from_dict(table, orient="index", columns=cols)
+df.index.name = "Kennzahl"
 
-    # Apply correct formatting per row
-    for name in metrics:
-        if name in ("CPI MoM", "CPI YoY", "Retail Sales MoM"):
-            styled = styled.format("{:.2f}%", subset=pd.IndexSlice[name, :])
-        elif name in ("Nonfarm Payrolls", "New Home Sales", "GDP (Real, Quarterly)", "Consumer Confidence", "Balance of Trade"):
-            styled = styled.format("{:, .0f}", subset=pd.IndexSlice[name, :])
-        else:
-            styled = styled.format("{:.2f}", subset=pd.IndexSlice[name, :])
+# Tabelle anzeigen
+st.dataframe(df)
 
-    st.write(styled)
-
-# Footer
+# Hinweis zu PMI
 st.markdown("---")
-st.markdown("*Datenquelle: FRED API (St. Louis Fed).* ")
+st.markdown("**Hinweis:** PMI-Daten stellt FRED seit 2016 nicht mehr bereit; wähle eine alternative Quelle.")
